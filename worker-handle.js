@@ -1,0 +1,285 @@
+/**
+ * Unified Worker Wrapper
+ * Integrates ExposedPromise and createExposedProxy into a Worker communication layer.
+ */
+
+const TRANSACTION = Symbol("transaction");
+
+class ExposedPromise {
+  constructor(executor) {
+    this.status = "pending";
+    this.value = undefined;
+    this.executor = executor ?? null;
+
+    this.promise = new Promise((resolve, reject) => {
+      this.resolve = resolve;
+      this.reject = reject;
+      if (executor) {
+        try {
+          executor(resolve, reject);
+        } catch (err) {
+          reject(err);
+        }
+      }
+    });
+
+    this.promise
+      .then(
+        (val) => {
+          this.status = "fulfilled";
+          this.value = val;
+        },
+        (err) => {
+          this.status = "rejected";
+          this.value = err;
+        },
+      )
+      .catch(() => {});
+  }
+
+  get settled() {
+    return this.status !== "pending";
+  }
+  then(fn, err) {
+    return this.promise.then(fn, err);
+  }
+  catch(err) {
+    return this.promise.catch(err);
+  }
+  finally(fn) {
+    return this.promise.finally(fn);
+  }
+}
+
+function createExposedProxy(input, path = []) {
+  const instance =
+    typeof input === "function" ||
+    (typeof input === "object" && input !== null && "promise" in input)
+      ? input
+      : new ExposedPromise((resolve) => resolve(input));
+
+  const $promise = instance.promise || instance;
+
+  // Use a function as target so the Proxy is "callable"
+  const dummyTarget = function () {};
+
+  return new Proxy(dummyTarget, {
+    get(_, prop) {
+      // 1. Internal Metadata Access
+      if (instance instanceof ExposedPromise) {
+        if (prop === "status") return instance.status;
+        if (prop === "value") return instance.value;
+        if (prop === "settled") return instance.settled;
+        if (prop === "resolve") return instance.resolve.bind(instance);
+        if (prop === "reject") return instance.reject.bind(instance);
+        if (prop === "promise") return instance.promise;
+      }
+
+      // 2. Promise standard methods
+      if (prop === "then") return $promise.then.bind($promise);
+      if (prop === "catch") return $promise.catch.bind($promise);
+      if (prop === "finally") return $promise.finally.bind($promise);
+      if (typeof prop === "symbol") return undefined;
+
+      // 3. Deferred property access
+      const deferred = $promise.then((resolved) => {
+        if (resolved == null) return undefined;
+
+        // If we have a WorkerWrapper, we check if the property exists locally
+        if (resolved instanceof _WorkerWrapper) {
+          if (prop in resolved) {
+            const val = resolved[prop];
+            return typeof val === "function" ? val.bind(resolved) : val;
+          }
+
+          /**
+           * To support both properties and methods:
+           * We return a specialized proxy that acts as a "Caller".
+           * If called as a function (apply), it triggers CALL_REMOTE.
+           * If awaited (then), it triggers GET_PROP.
+           */
+          const caller = (...args) =>
+            resolved.send("CALL_REMOTE", { prop, args });
+          const remoteValue = resolved.send("GET_PROP", { prop });
+
+          return new Proxy(caller, {
+            get(t, p) {
+              if (p === "then") return remoteValue.then.bind(remoteValue);
+              if (p === "catch") return remoteValue.catch.bind(remoteValue);
+              return createExposedProxy(remoteValue)[p];
+            },
+          });
+        }
+
+        const val = resolved[prop];
+        return typeof val === "function" ? val.bind(resolved) : val;
+      });
+
+      return createExposedProxy(deferred, [...path, prop]);
+    },
+
+    set(_, prop, val) {
+      $promise
+        .then((res) => {
+          if (res != null && typeof res === "object") {
+            if (res instanceof _WorkerWrapper && !(prop in res)) {
+              res.send("SET_PROP", { prop, val });
+            } else {
+              res[prop] = val;
+            }
+          }
+        })
+        .catch(() => {});
+      return true;
+    },
+
+    // Handle the function call: worker.someMethod(args)
+    apply(_, thisArg, args) {
+      const callPromise = $promise.then((fn) => {
+        if (typeof fn !== "function") {
+            console.warn(`Property ${fn} is not a function on the resolved value.`,fn);
+            return fn?._workerWrapper?.send("CALL_REMOTE", { prop:fn?.prop, args });
+        }
+        return fn(...args);
+      });
+      return createExposedProxy(callPromise);
+    },
+  });
+}
+
+const genId = () =>
+  `worker-tx-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
+
+class _WorkerWrapper {
+  constructor(url, options) {
+    this.transactions = new Map();
+    this._ready = new ExposedPromise();
+
+    try {
+      this._worker = new Worker(url, options);
+    } catch (err) {
+      this._ready.reject(err);
+      return;
+    }
+
+    this._worker.onmessage = (event) => {
+      if (!event.data || typeof event.data !== "object") return;
+      let { type, id, result, error } = event.data;
+
+      if (type === "ready") {
+        this._ready.resolve(this);
+        return;
+      }
+
+      if (id && this.transactions.has(id)) {
+        const trans = this.transactions.get(id);
+        this.transactions.delete(id);
+        if (error){
+            trans.reject(new Error(error));
+        }else{
+            if(result && result.__type === "function" && result.prop){
+                result = (...args) => this.send("CALL_REMOTE", { prop: result.prop, args });
+            }
+            if(result && typeof result === "object"){
+                result._workerWrapper = this; 
+            }
+            trans.resolve(result);
+        }
+      }
+    };
+
+    this._worker.onerror = (e) => this._rejectAll(e);
+  }
+
+  send(type, data, transfer) {
+    const id = genId();
+    const deferred = new ExposedPromise();
+    this.transactions.set(id, deferred);
+    this._worker.postMessage({ type, id, ...data }, transfer ?? []);
+    return deferred.promise;
+  }
+
+  _rejectAll(reason) {
+    for (const trans of this.transactions.values()) {
+      trans.reject(reason);
+    }
+    this.transactions.clear();
+  }
+}
+
+const WorkerWrapper = new Proxy(_WorkerWrapper, {
+  construct(target, args) {
+    const instance = new target(...args);
+    // Return a proxy that waits for the "ready" signal
+    return createExposedProxy(instance._ready.promise);
+  },
+});
+
+/**
+ * DEMO
+ */
+const workerImpl = () => {
+  self.state = { count: 100 };
+  self.someWork = (data) => `Worker processed: ${JSON.stringify(data)}`;
+
+  self.onmessage = async (event) => {
+    const { type, id, prop, val, args = [] } = event.data;
+    let result;
+    let error;
+
+    try {
+      if (type === "CALL_REMOTE") {
+        const target = self[prop];
+        result = typeof target === "function" ? await target(...args) : target;
+      } else if (type === "SET_PROP") {
+        self[prop] = val;
+        result = true;
+      } else if (type === "GET_PROP") {
+        const val = self[prop];
+        // Functions aren't transferable — return a sentinel
+        result = typeof val === "function" ? { __type: "function", prop } : val;
+      }
+    } catch (err) {
+      error = err.message;
+    }
+
+    self.postMessage({ id, result, error });
+  };
+  self.postMessage({ type: "ready" });
+};
+
+async function demo() {
+  const blob = new Blob([`(${workerImpl.toString()})()`], {
+    type: "application/javascript",
+  });
+  const url = URL.createObjectURL(blob);
+  const worker = new WorkerWrapper(url);
+
+  try {
+    // 1. Remote property access
+    const count = await worker.state;
+    // worker.state calls GET_PROP on "state" -> returns {count: 100}
+    // Then we access .count on the result
+    console.log("Initial state:", count);
+
+    const countValue = await worker.state.count;
+    console.log("Initial count:", countValue);
+
+    // 2. Remote function call
+    const greeting = await worker.someWork({ msg: "Hello!" });
+    console.log("Greeting:", greeting);
+
+    // 3. Remote set
+    worker.newVar = "Dynamic Value";
+
+    // 4. Verify set
+    const verified = await worker.newVar;
+    console.log("Verified remote var:", verified);
+
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Demo Error:", e);
+  }
+}
+
+demo();
