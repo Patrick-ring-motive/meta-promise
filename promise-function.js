@@ -1,3 +1,14 @@
+/**
+ * Wraps a function or a promise-to-function, allowing async function resolution 
+ * to be transparent to the caller. Enables: 
+ *   - Direct calls: fn(arg) 
+ *   - Promise-style handling: fn.then(...), fn.catch(...)
+ * 
+ * Why? To treat locally defined and remotely resolved (e.g., via Worker, fetch) 
+ * functions with the same interface — eliminating boilerplate around await 
+ * or .then() when the function's origin is async.
+ */
+
 function normalizeFunctionOrPromise(fnOrPromise) {
   if (typeof fnOrPromise === 'function') {
     return fnOrPromise;
