@@ -156,5 +156,29 @@ class MetaProxy extends Proxy{
   }
 }
 
-
+function findSymbol(target,prop){
+  const list = Object.getOwnPropertySymbols(target);
+  for(const key of list){
+    try{
+      if(key == prop){
+        return target[key];
+      }
+    }catch{}
+  }
+  prop = String(prop);
+  for(const key of list){
+    try{
+      if(String(key) == prop){
+        return target[key];
+      }
+    }catch{}
+  }
+  for(const key of list){
+    try{
+      if(key.description == prop){
+        return target[key];
+      }
+    }catch{}
+  }
+}
 
