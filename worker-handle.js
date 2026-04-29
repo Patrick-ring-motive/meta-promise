@@ -269,9 +269,10 @@ function createExposedProxy(input, path = []) {
       if (prop === "catch") return $promise.catch.bind($promise);
       if (prop === "finally") return $promise.finally.bind($promise);
       if (typeof prop === "symbol") return undefined;
-
+      console.log({$promise});
       // 3. Deferred property access
       const deferred = $promise.then((resolved) => {
+        console.log({resolved});
         if (resolved == null) return undefined;
 
         // If we have a WorkerWrapper, we check if the property exists locally
