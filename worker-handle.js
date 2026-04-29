@@ -135,14 +135,9 @@ function createExposedProxy(input, path = []) {
 
     // Handle the function call: worker.someMethod(args)
     apply(_, thisArg, args) {
-      const callPromise = $promise.then((fn) => {
-        if (typeof fn !== "function") {
-            console.warn(`Property ${fn} is not a function on the resolved value.`,fn);
-            return fn?._workerWrapper?.send("CALL_REMOTE", { prop:fn?.prop, args });
-        }
-        return fn(...args);
-      });
-      return createExposedProxy(callPromise);
+      return createExposedProxy(
+        PromiseFunction($promise)(...args)
+      );
     },
   });
 }
@@ -177,8 +172,15 @@ class _WorkerWrapper {
         if (error){
             trans.reject(new Error(error));
         }else{
-            if(result && result.__type === "function" && result.prop){
-                result = (...args) => this.send("CALL_REMOTE", { prop: result.prop, args });
+            if (result?.__type === "function") {
+              result = PromiseFunction(
+                Promise.resolve((...args) =>
+                  this.send("CALL_REMOTE", {
+                    prop: result.prop,
+                    args
+                  })
+                )
+              );
             }
             if(result && typeof result === "object"){
                 result._workerWrapper = this; 
