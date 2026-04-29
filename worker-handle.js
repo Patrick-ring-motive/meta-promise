@@ -1,7 +1,33 @@
-/**
- * Unified Worker Wrapper
- * Integrates ExposedPromise and createExposedProxy into a Worker communication layer.
- */
+function promiseFunction(fnOrPromise) {
+  if (typeof fnOrPromise !== 'function' && typeof fnOrPromise?.then === 'function') {
+    const promise = fnOrPromise;
+    const promiseFn = async function $promiseFn(...args) {
+      const fn = await promise;
+      if (typeof fn !== 'function') {
+        return fn(...args);
+      }
+      return fn.apply(this, args);
+    };
+    for(const prop of ['then','catch','finally','reject','resolve','try']){
+      if(typeof promise[prop] === 'function'){
+        promiseFn[prop] = promise[prop].bind(fnOrPromise);
+      }else if(prop in promise){
+        promiseFn[prop] = promise[prop];
+      }
+    }
+    return promiseFn;
+  }
+  return fnOrPromise;
+}
+
+class $PromiseFunction extends Function {}
+
+const PromiseFunction = new Proxy($PromiseFunction, {
+  construct(target, args, receiver){
+    const $this = receiver ?? target;
+    return promiseFunction(args[0]);
+  }
+});
 
 const TRANSACTION = Symbol("transaction");
 
