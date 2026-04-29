@@ -157,10 +157,9 @@ function MetaProxy(target, handler){
         target = createCallable(target);
       }
     }
-    const $this = {};
-    $this.proxy = new Proxy(target, handler);
-    $this.target = $target;
-    $this.handler = $handler;
+    const $this = new Proxy(target, handler);
+    $this.$target = $target;
+    $this.$handler = $handler;
     return $this;
 }
 
@@ -249,10 +248,7 @@ function createExposedProxy(input, path = []) {
 
   const $promise = instance.promise || instance;
 
-  // Use a function as target so the Proxy is "callable"
-  const dummyTarget = function () {};
-
-  return new Proxy(dummyTarget, {
+  return MetaProxy(instance, {
     get(_, prop) {
       // 1. Internal Metadata Access
       if (instance instanceof ExposedPromise) {
@@ -290,7 +286,7 @@ function createExposedProxy(input, path = []) {
             resolved.send("CALL_REMOTE", { prop, args });
           const remoteValue = resolved.send("GET_PROP", { prop });
 
-          return new Proxy(caller, {
+          return MetaProxy(caller, {
             get(t, p) {
               if (p === "then") return remoteValue.then.bind(remoteValue);
               if (p === "catch") return remoteValue.catch.bind(remoteValue);
@@ -401,7 +397,7 @@ class _WorkerWrapper {
   }
 }
 
-const WorkerWrapper = new Proxy(_WorkerWrapper, {
+const WorkerWrapper = MetaProxy(_WorkerWrapper, {
   construct(target, args) {
     const instance = new target(...args);
     // Return a proxy that waits for the "ready" signal
