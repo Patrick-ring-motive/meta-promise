@@ -8,55 +8,35 @@
  * functions with the same interface — eliminating boilerplate around await 
  * or .then() when the function's origin is async.
  */
-
-function normalizeFunctionOrPromise(fnOrPromise) {
-  if (typeof fnOrPromise === 'function') {
-    return fnOrPromise;
-  }
-
-  if (fnOrPromise && typeof fnOrPromise.then === 'function') {
-    // Return callable that also has promise interface
-    const wrapper = function (...args) {
-      return fnOrPromise.then(fn => {
-        if (typeof fn !== 'function') {
-          throw new TypeError('Promise did not resolve to a function');
-        }
-        return fn.apply(this, args);
-      });
-    };
-
-    // Forward promise methods
-    wrapper.then = fnOrPromise.then.bind(fnOrPromise);
-    wrapper.catch = fnOrPromise.catch.bind(fnOrPromise);
-    wrapper.finally = fnOrPromise.finally.bind(fnOrPromise);
-
-    return wrapper;
-  }
-
-  throw new TypeError('Input must be a function or a Promise resolving to a function');
-}
-
-class PromiseFunction extends Function {
-  constructor(fnOrPromise) {
-    const normalized = normalizeFunctionOrPromise(fnOrPromise);
-    
-    // Create callable that inherits from PromiseFunction.prototype
-    const instance = new Proxy(normalized, {
-      get(target, prop, receiver) {
-        // Check prototype chain first
-        if (prop in PromiseFunction.prototype) {
-          return PromiseFunction.prototype[prop];
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-      getPrototypeOf() {
-        return PromiseFunction.prototype;
+function promiseFunction(fnOrPromise) {
+  if (typeof fnOrPromise !== 'function' && typeof fnOrPromise?.then === 'function') {
+    const promise = fnOrPromise;
+    const promiseFn = async function $promiseFn(...args) {
+      const fn = await promise;
+      if (typeof fn !== 'function') {
+        return fn(...args);
       }
-    });
-
-    return instance;
+      return fn.apply(this, args);
+    };
+    for(const prop of ['then','catch','finally','reject','resolve','try']){
+      if(typeof promise[prop] === 'function'){
+        promiseFn[prop] = promise[prop].bind(fnOrPromise);
+      }else if(prop in promise){
+        promiseFn[prop] = promise[prop];
+      }
+    }
+    return promiseFn;
   }
+  return fnOrPromise;
 }
 
-// Fix prototype chain
-Object.setPrototypeOf(PromiseFunction.prototype, Function.prototype);
+class $PromiseFunction extends Function {}
+
+const PromiseFunction = new Proxy($PromiseFunction, {
+  construct(target, args, receiver){
+    const $this = receiver ?? target;
+    return promiseFunction(args[0]);
+  }
+});
+
+
