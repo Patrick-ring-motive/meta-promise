@@ -139,8 +139,7 @@ const obj = x =>{
   return Object(x);
 };
 
-class MetaProxy extends Proxy{
-  constructor(target, handler){
+function MetaProxy(target, handler){
     const $target = target = obj(target);
     const $handler = handler = obj(handler);
     if(handler.apply || handler.construct){
@@ -150,10 +149,11 @@ class MetaProxy extends Proxy{
         target = createCallable(target);
       }
     }
-    const $this = super(target, handler);
-    $this[Symbol('*target')] = $target;
-    $this[Symbol('*handler')] = $handler;
-  }
+    const $this = {};
+    $this.proxy = new Proxy(target, handler);
+    $this.target = $target;
+    $this.handler = $handler;
+    return $this;
 }
 
 function findSymbol(target,prop){
