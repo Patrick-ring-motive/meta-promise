@@ -121,7 +121,6 @@ function promiseFunction(fnOrPromise) {
         // intentionally trigger internal throw behavior
         return fn(...args);
       }
-      console.log({fn},String(fn));
       return fn.apply(this, args);
     };
     return createCallable(promise,promiseFn);
@@ -270,10 +269,8 @@ function createExposedProxy(input, path = []) {
       if (prop === "catch") return $promise.catch.bind($promise);
       if (prop === "finally") return $promise.finally.bind($promise);
       if (typeof prop === "symbol") return undefined;
-      console.log({$promise});
       // 3. Deferred property access
       const deferred = $promise.then((resolved) => {
-        console.log({resolved});
         if (resolved == null) return undefined;
 
         // If we have a WorkerWrapper, we check if the property exists locally
@@ -306,7 +303,7 @@ function createExposedProxy(input, path = []) {
         return typeof val === "function" ? val.bind(resolved) : val;
       });
 
-      return createExposedProxy(deferred, [...path, prop]);
+      return createExposedProxy(PromiseFunction(deferred), [...path, prop]);
     },
 
     set(_, prop, val) {
@@ -326,7 +323,6 @@ function createExposedProxy(input, path = []) {
 
     // Handle the function call: worker.someMethod(args)
     apply(_, thisArg, args) {
-      console.log('apply',{$promise});
       return createExposedProxy(
         PromiseFunction($promise)(...args)
       );
@@ -359,7 +355,6 @@ class _WorkerWrapper {
       }
 
       if (id && this.transactions.has(id)) {
-        console.log({result});
         const trans = this.transactions.get(id);
         this.transactions.delete(id);
         if (error){
@@ -367,11 +362,11 @@ class _WorkerWrapper {
         }else{
             if (result?.__type === "function") {
               const $this = this;
+              const {prop} = result;
               result = PromiseFunction(
                 Promise.resolve((...args) =>{
-                  console.log({$this});
                   return $this.send("CALL_REMOTE", {
-                    prop: result.prop,
+                    prop: prop,
                     args
                   })
                 })
@@ -393,7 +388,8 @@ class _WorkerWrapper {
     const id = genId();
     const deferred = new ExposedPromise();
     this.transactions.set(id, deferred);
-    this._worker.postMessage({ type, id, ...data }, transfer ?? []);
+    const message = { type, id, ...data };
+    this._worker.postMessage(message, transfer ?? []);
     return deferred.promise;
   }
 
@@ -418,7 +414,9 @@ const WorkerWrapper = new Proxy(_WorkerWrapper, {
  */
 const workerImpl = () => {
   self.state = { count: 100 };
-  self.someWork = (data) => `Worker processed: ${JSON.stringify(data)}`;
+  self.someWork = (data) => {
+    return `Worker processed: ${JSON.stringify(data)}`
+  };
 
   self.onmessage = async (event) => {
     const { type, id, prop, val, args = [] } = event.data;
@@ -428,7 +426,7 @@ const workerImpl = () => {
     try {
       if (type === "CALL_REMOTE") {
         const target = self[prop];
-        result = typeof target === "function" ? await target(...args) : target;
+        result = typeof target === "function" ? await target(...args) : (await target)(...args);
       } else if (type === "SET_PROP") {
         self[prop] = val;
         result = true;
