@@ -121,6 +121,7 @@ function promiseFunction(fnOrPromise) {
         // intentionally trigger internal throw behavior
         return fn(...args);
       }
+      console.log({fn},String(fn));
       return fn.apply(this, args);
     };
     return createCallable(promise,promiseFn);
@@ -325,6 +326,7 @@ function createExposedProxy(input, path = []) {
 
     // Handle the function call: worker.someMethod(args)
     apply(_, thisArg, args) {
+      console.log('apply',{$promise});
       return createExposedProxy(
         PromiseFunction($promise)(...args)
       );
@@ -364,14 +366,17 @@ class _WorkerWrapper {
             trans.reject(new Error(error));
         }else{
             if (result?.__type === "function") {
+              const $this = this;
               result = PromiseFunction(
-                Promise.resolve((...args) =>
-                  this.send("CALL_REMOTE", {
+                Promise.resolve((...args) =>{
+                  console.log({$this});
+                  return $this.send("CALL_REMOTE", {
                     prop: result.prop,
                     args
                   })
-                )
+                })
               );
+              result.__type = "function";
             }
             if(result && /object|function/.test(typeof result)){
                 result._workerWrapper = this; 
