@@ -1,3 +1,103 @@
+function isClass(fn) {
+  if (typeof fn !== "function") return false;
+  const src = Function.prototype.toString.call(fn);
+  return /^class\s/.test(src);
+}
+
+function isConstructor(fn) {
+  try {
+    Reflect.construct(String, [], fn);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function callableClass($class){
+  const handler = {
+    apply(target, thisArg, args) {
+      return Reflect.construct(target, args, thisArg);
+    }
+  };
+  return new Proxy($class, handler);
+}
+
+function createConstructable(fn){
+  const handler = {
+    construct(target, args, newTarget) {
+      return Reflect.apply(target, newTarget, args);
+    }
+  };
+  return new Proxy(fn, handler);
+}
+
+function createCallable($target,fn) {
+  if(typeof $target === 'function'){
+    if(isClass($target)){
+      return callableClass($target);
+    }
+    if(!isConstructor($target)){
+      return createConstructable($target);
+    }
+    return $target;
+  }
+  fn ??= (function(){return $target}).bind($target);
+  const handler = {
+    getPrototypeOf(target) {
+      return Reflect.getPrototypeOf($target);
+    },
+
+    setPrototypeOf(target, prototype) {
+      return Reflect.setPrototypeOf($target, prototype);
+    },
+
+    isExtensible(target) {
+      return Reflect.isExtensible($target);
+    },
+
+    preventExtensions(target) {
+      return Reflect.preventExtensions($target);
+    },
+
+    getOwnPropertyDescriptor(target, prop) {
+      return Reflect.getOwnPropertyDescriptor($target, prop);
+    },
+
+    defineProperty(target, prop, descriptor) {
+      return Reflect.defineProperty($target, prop, descriptor);
+    },
+
+    has(target, prop) {
+      return Reflect.has($target, prop);
+    },
+
+    get(target, prop, receiver) {
+      return Reflect.get($target, prop, receiver);
+    },
+
+    set(target, prop, value, receiver) {
+      return Reflect.set($target, prop, value, receiver);
+    },
+
+    deleteProperty(target, prop) {
+      return Reflect.deleteProperty($target, prop);
+    },
+
+    ownKeys(target) {
+      return Reflect.ownKeys($target);
+    },
+
+    apply(target, thisArg, args) {
+      return Reflect.apply(target, thisArg, args);
+    },
+
+    construct(target, args, newTarget) {
+      return Reflect.construct(target, args, newTarget);
+    }
+  };
+  return new Proxy(fn, handler);
+}
+
 /**
  * Wraps a function or a promise-to-function, allowing async function resolution 
  * to be transparent to the caller. Enables: 
