@@ -118,14 +118,7 @@ function promiseFunction(fnOrPromise) {
       }
       return fn.apply(this, args);
     };
-    for(const prop of ['then','catch','finally','reject','resolve','try']){
-      if(typeof promise[prop] === 'function'){
-        promiseFn[prop] = promise[prop].bind(fnOrPromise);
-      }else if(prop in promise){
-        promiseFn[prop] = promise[prop];
-      }
-    }
-    return promiseFn;
+    return createCallable(promise,promiseFn);
   }
   return fnOrPromise;
 }
