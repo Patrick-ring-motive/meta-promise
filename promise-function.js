@@ -132,4 +132,29 @@ const PromiseFunction = new Proxy($PromiseFunction, {
   }
 });
 
+const obj = x =>{
+  if(x === undefined || x === null){
+    return Object.create(null);
+  }
+  return Object(x);
+};
+
+class MetaProxy extends Proxy{
+  constructor(target, handler){
+    const $target = target = obj(target);
+    const $handler = handler = obj(handler);
+    if(handler.apply || handler.construct){
+      if(typeof target.then === 'function' && typeof target !== 'function'){
+        target = promiseFunction(target);
+      }else{
+        target = createCallable(target);
+      }
+    }
+    const $this = super(target, handler);
+    $this[Symbol('*target')] = $target;
+    $this[Symbol('*handler')] = $handler;
+  }
+}
+
+
 
