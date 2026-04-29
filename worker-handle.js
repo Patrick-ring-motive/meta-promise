@@ -370,7 +370,7 @@ class _WorkerWrapper {
                 )
               );
             }
-            if(result && typeof result === "object"){
+            if(result && /object|function/.test(typeof result)){
                 result._workerWrapper = this; 
             }
             trans.resolve(result);
