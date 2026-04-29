@@ -357,6 +357,7 @@ class _WorkerWrapper {
       }
 
       if (id && this.transactions.has(id)) {
+        console.log({result});
         const trans = this.transactions.get(id);
         this.transactions.delete(id);
         if (error){
