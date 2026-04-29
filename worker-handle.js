@@ -118,6 +118,7 @@ function promiseFunction(fnOrPromise) {
     const promiseFn = async function $promiseFn(...args) {
       const fn = await promise;
       if (typeof fn !== 'function') {
+        // intentionally trigger internal throw behavior
         return fn(...args);
       }
       return fn.apply(this, args);
