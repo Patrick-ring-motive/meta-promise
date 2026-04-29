@@ -72,7 +72,11 @@ function createCallable($target,fn) {
     },
 
     get(target, prop, receiver) {
-      return Reflect.get($target, prop, receiver);
+      const value = Reflect.get($target, prop, receiver);
+      if(typeof value === 'function'){
+        return value.bind($target);
+      }
+      return value;
     },
 
     set(target, prop, value, receiver) {
