@@ -129,6 +129,9 @@ const PromiseFunction = new Proxy($PromiseFunction, {
   construct(target, args, receiver){
     const $this = receiver ?? target;
     return promiseFunction(args[0]);
+  },
+  apply(target, thisArg, args) {
+    return promiseFunction(args[0]);
   }
 });
 
