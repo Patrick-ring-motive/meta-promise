@@ -39,7 +39,7 @@ class ExposedPromise {
         this.status = "rejected";
         this.value = reason;
       }
-    ).catch(() => {}); 
+    ).catch(() => {});
   }
 
   get settled() {
@@ -51,11 +51,9 @@ class ExposedPromise {
     return this.promise.then(onFulfilled, onRejected);
   }
 
-  catch(onRejected) {
+  catch (onRejected) {
     return this.promise.catch(onRejected);
-  }
-
-  finally(onFinally) {
+  } finally(onFinally) {
     return this.promise.finally(onFinally);
   }
 }
@@ -67,9 +65,9 @@ class ExposedPromise {
 function createExposedProxy(input) {
   // If input is an executor function or null, create a new ExposedPromise
   // If it's already an ExposedPromise or standard Promise, use it.
-  const instance = (typeof input === 'function' || input === undefined) 
-    ? new ExposedPromise(input) 
-    : input;
+  const instance = (typeof input === 'function' || input === undefined) ?
+    new ExposedPromise(input) :
+    input;
 
   // The underlying promise we are proxying
   const p = instance.promise || instance;
@@ -123,7 +121,7 @@ function createExposedProxy(input) {
           instance.value[prop] = value;
         }
       }
-      
+
       // Still perform the async set to maintain consistency with the promise chain
       p.then(resolved => {
         if (resolved != null && typeof resolved === 'object') {
@@ -153,4 +151,7 @@ function createExposedProxy(input) {
   });
 }
 
-export { ExposedPromise, createExposedProxy };
+export {
+  ExposedPromise,
+  createExposedProxy
+};
