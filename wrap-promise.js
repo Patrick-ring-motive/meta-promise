@@ -4,8 +4,8 @@ function wrapPromise(promise) {
 
   return new Proxy(dummyTarget, {
     get(_, prop) {
-      if (prop === 'then')    return promise.then.bind(promise);
-      if (prop === 'catch')   return promise.catch.bind(promise);
+      if (prop === 'then') return promise.then.bind(promise);
+      if (prop === 'catch') return promise.catch.bind(promise);
       if (prop === 'finally') return promise.finally.bind(promise);
 
       const deferred = promise.then(resolved => {
