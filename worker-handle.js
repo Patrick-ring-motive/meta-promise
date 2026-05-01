@@ -13,7 +13,7 @@ function isConstructor(fn) {
   }
 }
 
-function callableClass($class){
+function callableClass($class) {
   const handler = {
     apply(target, thisArg, args) {
       return Reflect.construct(target, args, thisArg);
@@ -22,7 +22,7 @@ function callableClass($class){
   return new Proxy($class, handler);
 }
 
-function createConstructable(fn){
+function createConstructable(fn) {
   const handler = {
     construct(target, args, newTarget) {
       return Reflect.apply(target, newTarget, args);
@@ -31,17 +31,19 @@ function createConstructable(fn){
   return new Proxy(fn, handler);
 }
 
-function createCallable($target,fn) {
-  if(typeof $target === 'function'){
-    if(isClass($target)){
+function createCallable($target, fn) {
+  if (typeof $target === 'function') {
+    if (isClass($target)) {
       return callableClass($target);
     }
-    if(!isConstructor($target)){
+    if (!isConstructor($target)) {
       return createConstructable($target);
     }
     return $target;
   }
-  fn ??= (function(){return $target}).bind($target);
+  fn ??= (function() {
+    return $target
+  }).bind($target);
   const handler = {
     getPrototypeOf(target) {
       return Reflect.getPrototypeOf($target);
@@ -73,7 +75,7 @@ function createCallable($target,fn) {
 
     get(target, prop, receiver) {
       const value = Reflect.get($target, prop, receiver);
-      if(typeof value === 'function'){
+      if (typeof value === 'function') {
         return value.bind($target);
       }
       return value;
@@ -123,7 +125,7 @@ function promiseFunction(fnOrPromise) {
       }
       return fn.apply(this, args);
     };
-    return createCallable(promise,promiseFn);
+    return createCallable(promise, promiseFn);
   }
   return fnOrPromise;
 }
@@ -131,7 +133,7 @@ function promiseFunction(fnOrPromise) {
 class $PromiseFunction extends Function {}
 
 const PromiseFunction = new Proxy($PromiseFunction, {
-  construct(target, args, receiver){
+  construct(target, args, receiver) {
     const $this = receiver ?? target;
     return promiseFunction(args[0]);
   },
@@ -140,56 +142,54 @@ const PromiseFunction = new Proxy($PromiseFunction, {
   }
 });
 
-const obj = x =>{
-  if(x === undefined || x === null){
+const obj = x => {
+  if (x === undefined || x === null) {
     return Object.create(null);
   }
   return Object(x);
 };
 
-function MetaProxy(target, handler){
-    const $target = target = obj(target);
-    const $handler = handler = obj(handler);
-    if(handler.apply || handler.construct){
-      if(typeof target.then === 'function' && typeof target !== 'function'){
-        target = promiseFunction(target);
-      }else{
-        target = createCallable(target);
-      }
+function MetaProxy(target, handler) {
+  const $target = target = obj(target);
+  const $handler = handler = obj(handler);
+  if (handler.apply || handler.construct) {
+    if (typeof target.then === 'function' && typeof target !== 'function') {
+      target = promiseFunction(target);
+    } else {
+      target = createCallable(target);
     }
-    const $this = new Proxy(target, handler);
-    $this.$target = $target;
-    $this.$handler = $handler;
-    return $this;
+  }
+  const $this = new Proxy(target, handler);
+  $this.$target = $target;
+  $this.$handler = $handler;
+  return $this;
 }
 
-function findSymbol(target,prop){
+function findSymbol(target, prop) {
   const list = Object.getOwnPropertySymbols(target);
-  for(const key of list){
-    try{
-      if(key == prop){
+  for (const key of list) {
+    try {
+      if (key == prop) {
         return target[key];
       }
-    }catch{}
+    } catch {}
   }
   prop = String(prop);
-  for(const key of list){
-    try{
-      if(String(key) == prop){
+  for (const key of list) {
+    try {
+      if (String(key) == prop) {
         return target[key];
       }
-    }catch{}
+    } catch {}
   }
-  for(const key of list){
-    try{
-      if(key.description == prop){
+  for (const key of list) {
+    try {
+      if (key.description == prop) {
         return target[key];
       }
-    }catch{}
+    } catch {}
   }
 }
-
-
 
 const TRANSACTION = Symbol("transaction");
 
@@ -231,10 +231,9 @@ class ExposedPromise {
   then(fn, err) {
     return this.promise.then(fn, err);
   }
-  catch(err) {
+  catch (err) {
     return this.promise.catch(err);
-  }
-  finally(fn) {
+  } finally(fn) {
     return this.promise.finally(fn);
   }
 }
@@ -242,9 +241,9 @@ class ExposedPromise {
 function createExposedProxy(input, path = []) {
   const instance =
     typeof input === "function" ||
-    (typeof input === "object" && input !== null && "promise" in input)
-      ? input
-      : new ExposedPromise((resolve) => resolve(input));
+    (typeof input === "object" && input !== null && "promise" in input) ?
+    input :
+    new ExposedPromise((resolve) => resolve(input));
 
   const $promise = instance.promise || instance;
 
@@ -283,8 +282,13 @@ function createExposedProxy(input, path = []) {
            * If awaited (then), it triggers GET_PROP.
            */
           const caller = (...args) =>
-            resolved.send("CALL_REMOTE", { prop, args });
-          const remoteValue = resolved.send("GET_PROP", { prop });
+            resolved.send("CALL_REMOTE", {
+              prop,
+              args
+            });
+          const remoteValue = resolved.send("GET_PROP", {
+            prop
+          });
 
           return MetaProxy(caller, {
             get(t, p) {
@@ -307,7 +311,10 @@ function createExposedProxy(input, path = []) {
         .then((res) => {
           if (res != null && typeof res === "object") {
             if (res instanceof _WorkerWrapper && !(prop in res)) {
-              res.send("SET_PROP", { prop, val });
+              res.send("SET_PROP", {
+                prop,
+                val
+              });
             } else {
               res[prop] = val;
             }
@@ -343,7 +350,12 @@ class _WorkerWrapper {
 
     this._worker.onmessage = (event) => {
       if (!event.data || typeof event.data !== "object") return;
-      let { type, id, result, error } = event.data;
+      let {
+        type,
+        id,
+        result,
+        error
+      } = event.data;
 
       if (type === "ready") {
         this._ready.resolve(this);
@@ -353,26 +365,28 @@ class _WorkerWrapper {
       if (id && this.transactions.has(id)) {
         const trans = this.transactions.get(id);
         this.transactions.delete(id);
-        if (error){
-            trans.reject(new Error(error));
-        }else{
-            if (result?.__type === "function") {
-              const $this = this;
-              const {prop} = result;
-              result = PromiseFunction(
-                Promise.resolve((...args) =>{
-                  return $this.send("CALL_REMOTE", {
-                    prop: prop,
-                    args
-                  })
+        if (error) {
+          trans.reject(new Error(error));
+        } else {
+          if (result?.__type === "function") {
+            const $this = this;
+            const {
+              prop
+            } = result;
+            result = PromiseFunction(
+              Promise.resolve((...args) => {
+                return $this.send("CALL_REMOTE", {
+                  prop: prop,
+                  args
                 })
-              );
-              result.__type = "function";
-            }
-            if(result && /object|function/.test(typeof result)){
-                result._workerWrapper = this; 
-            }
-            trans.resolve(result);
+              })
+            );
+            result.__type = "function";
+          }
+          if (result && /object|function/.test(typeof result)) {
+            result._workerWrapper = this;
+          }
+          trans.resolve(result);
         }
       }
     };
@@ -384,7 +398,11 @@ class _WorkerWrapper {
     const id = genId();
     const deferred = new ExposedPromise();
     this.transactions.set(id, deferred);
-    const message = { type, id, ...data };
+    const message = {
+      type,
+      id,
+      ...data
+    };
     this._worker.postMessage(message, transfer ?? []);
     return deferred.promise;
   }
@@ -409,13 +427,21 @@ const WorkerWrapper = MetaProxy(_WorkerWrapper, {
  * DEMO
  */
 const workerImpl = () => {
-  self.state = { count: 100 };
+  self.state = {
+    count: 100
+  };
   self.someWork = (data) => {
     return `Worker processed: ${JSON.stringify(data)}`
   };
 
   self.onmessage = async (event) => {
-    const { type, id, prop, val, args = [] } = event.data;
+    const {
+      type,
+      id,
+      prop,
+      val,
+      args = []
+    } = event.data;
     let result;
     let error;
 
@@ -429,15 +455,24 @@ const workerImpl = () => {
       } else if (type === "GET_PROP") {
         const val = self[prop];
         // Functions aren't transferable — return a sentinel
-        result = typeof val === "function" ? { __type: "function", prop } : val;
+        result = typeof val === "function" ? {
+          __type: "function",
+          prop
+        } : val;
       }
     } catch (err) {
       error = err.message;
     }
 
-    self.postMessage({ id, result, error });
+    self.postMessage({
+      id,
+      result,
+      error
+    });
   };
-  self.postMessage({ type: "ready" });
+  self.postMessage({
+    type: "ready"
+  });
 };
 
 async function demo() {
@@ -458,7 +493,9 @@ async function demo() {
     console.log("Initial count:", countValue);
 
     // 2. Remote function call
-    const greeting = await worker.someWork({ msg: "Hello!" });
+    const greeting = await worker.someWork({
+      msg: "Hello!"
+    });
     console.log("Greeting:", greeting);
 
     // 3. Remote set
