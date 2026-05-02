@@ -13,7 +13,7 @@ function isConstructor(fn) {
   }
 }
 
-function callableClass($class){
+function callableClass($class) {
   const handler = {
     apply(target, thisArg, args) {
       return Reflect.construct(target, args, thisArg);
@@ -22,7 +22,7 @@ function callableClass($class){
   return new Proxy($class, handler);
 }
 
-function createConstructable(fn){
+function createConstructable(fn) {
   const handler = {
     construct(target, args, newTarget) {
       return Reflect.apply(target, newTarget, args);
@@ -31,17 +31,19 @@ function createConstructable(fn){
   return new Proxy(fn, handler);
 }
 
-function createCallable($target,fn) {
-  if(typeof $target === 'function'){
-    if(isClass($target)){
+function createCallable($target, fn) {
+  if (typeof $target === 'function') {
+    if (isClass($target)) {
       return callableClass($target);
     }
-    if(!isConstructor($target)){
+    if (!isConstructor($target)) {
       return createConstructable($target);
     }
     return $target;
   }
-  fn ??= (function(){return $target}).bind($target);
+  fn ??= (function() {
+    return $target
+  }).bind($target);
   const handler = {
     getPrototypeOf(target) {
       return Reflect.getPrototypeOf($target);
@@ -73,7 +75,7 @@ function createCallable($target,fn) {
 
     get(target, prop, receiver) {
       const value = Reflect.get($target, prop, receiver);
-      if(typeof value === 'function'){
+      if (typeof value === 'function') {
         return value.bind($target);
       }
       return value;
@@ -123,7 +125,7 @@ function promiseFunction(fnOrPromise) {
       }
       return fn.apply(this, args);
     };
-    return createCallable(promise,promiseFn);
+    return createCallable(promise, promiseFn);
   }
   return fnOrPromise;
 }
@@ -131,7 +133,7 @@ function promiseFunction(fnOrPromise) {
 class $PromiseFunction extends Function {}
 
 const PromiseFunction = new Proxy($PromiseFunction, {
-  construct(target, args, receiver){
+  construct(target, args, receiver) {
     const $this = receiver ?? target;
     return promiseFunction(args[0]);
   },
@@ -140,53 +142,52 @@ const PromiseFunction = new Proxy($PromiseFunction, {
   }
 });
 
-const obj = x =>{
-  if(x === undefined || x === null){
+const obj = x => {
+  if (x === undefined || x === null) {
     return Object.create(null);
   }
   return Object(x);
 };
 
-function MetaProxy(target, handler){
-    const $target = target = obj(target);
-    const $handler = handler = obj(handler);
-    if(handler.apply || handler.construct){
-      if(typeof target.then === 'function' && typeof target !== 'function'){
-        target = promiseFunction(target);
-      }else{
-        target = createCallable(target);
-      }
+function MetaProxy(target, handler) {
+  const $target = target = obj(target);
+  const $handler = handler = obj(handler);
+  if (handler.apply || handler.construct) {
+    if (typeof target.then === 'function' && typeof target !== 'function') {
+      target = promiseFunction(target);
+    } else {
+      target = createCallable(target);
     }
-    const $this = {};
-    $this.proxy = new Proxy(target, handler);
-    $this.target = $target;
-    $this.handler = $handler;
-    return $this;
+  }
+  const $this = {};
+  $this.proxy = new Proxy(target, handler);
+  $this.target = $target;
+  $this.handler = $handler;
+  return $this;
 }
 
-function findSymbol(target,prop){
+function findSymbol(target, prop) {
   const list = Object.getOwnPropertySymbols(target);
-  for(const key of list){
-    try{
-      if(key == prop){
+  for (const key of list) {
+    try {
+      if (key == prop) {
         return target[key];
       }
-    }catch{}
+    } catch {}
   }
   prop = String(prop);
-  for(const key of list){
-    try{
-      if(String(key) == prop){
+  for (const key of list) {
+    try {
+      if (String(key) == prop) {
         return target[key];
       }
-    }catch{}
+    } catch {}
   }
-  for(const key of list){
-    try{
-      if(key.description == prop){
+  for (const key of list) {
+    try {
+      if (key.description == prop) {
         return target[key];
       }
-    }catch{}
+    } catch {}
   }
 }
-
